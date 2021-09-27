@@ -1,5 +1,5 @@
 # AutoLight
-AutoLight is an extremely simple Web API written in C# and .NET 5 to automatically turn on a light at sunset through Home Assistant.
+AutoLight is an extremely simple Web API written in C# and .NET Core 5 to automatically turn on a light at sunset (-1 hour because of preference) through Home Assistant.
 
 Uses Hangfire to schedule the task of turning on/off.
 
