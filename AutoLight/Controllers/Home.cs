@@ -36,7 +36,6 @@ namespace AutoLight.Controllers
         {
             var sunsetRoute = "https://api.sunrise-sunset.org/json?lat=51.5562404&lng=5.0886014";
             var client = new HttpClient();
-            SwitchLightJob("on");
             var timesResult = await client.GetAsync(sunsetRoute);
             var sunriseSunset =
                 JsonConvert.DeserializeObject<SunriseSunset>(await timesResult.Content.ReadAsStringAsync());
@@ -54,7 +53,8 @@ namespace AutoLight.Controllers
             {
                 _logger.LogInformation("Scheduling light to turn on at sunset");
                 SwitchLightJob("off");
-                var job = BackgroundJob.Schedule(() => SwitchLightJob("on"), sunset);
+                var job = BackgroundJob.Schedule(() => SwitchLightJob("on"), sunset.AddHours(-1));
+                _logger.LogInformation("Job ID: {0}", job);
                 WriteToFile(job);
             }
             else if (DateTime.Now > sunset)
@@ -73,18 +73,22 @@ namespace AutoLight.Controllers
         public async Task<string> TurnOff()
         {
             var result = await SwitchLightJob("off");
-            using (StreamReader r = new StreamReader("jobs.txt"))
+            if (System.IO.File.Exists("jobs.txt"))
             {
-                var all = r.ReadToEnd().Split(",");
-                foreach (var job in all)
+                using (StreamReader r = new StreamReader("jobs.txt"))
                 {
-                    if(!string.IsNullOrEmpty(job))
-                        BackgroundJob.Delete(job);
+                    var all = r.ReadToEnd().Split(",");
+                    foreach (var job in all)
+                    {
+                        if (!string.IsNullOrEmpty(job))
+                            BackgroundJob.Delete(job);
+                    }
+
+                    r.Dispose();
                 }
-                
-                r.Dispose();
+                System.IO.File.Delete("jobs.txt");
             }
-            System.IO.File.Delete("jobs.txt");
+
             return $"{result.StatusCode}: {await result.Content.ReadAsStringAsync()}";
         }
 
@@ -94,7 +98,7 @@ namespace AutoLight.Controllers
             var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", $"{token}");
             //entity to switch state of
-            var entity_id = "{\"entity_id\": \"light.yeelight_color_0x00000000080192ae\"}";
+            var entity_id = "{\"entity_id\": \"light.office_light\"}";
             HttpContent content = new StringContent(entity_id, Encoding.UTF8, "application/json");
             //Home Assistant api url:
             return await client.PostAsync(new Uri($"http://localhost:8123/api/services/light/turn_{state}"), content);
