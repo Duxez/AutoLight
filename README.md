@@ -5,3 +5,5 @@ Uses Hangfire to schedule the task of turning on/off.
 
 I made this so I can "clock" into my room with an NFC tag and make sure the light turns on at sunset so I don't have to myself.
 Clocking out also turns off the light.
+
+Also supports turning a led light, that is connected to a raspberry pi, on and off based on the checked in state. Why? Because, why not! :D
