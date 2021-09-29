@@ -132,7 +132,7 @@ namespace AutoLight.Controllers
                 w.Dispose();
             }
         }
-        [HttpGet]
+        
         public async Task CheckWeather()
         {
             bool turnOff = true;
