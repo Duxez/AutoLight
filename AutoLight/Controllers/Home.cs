@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Device.Gpio;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -22,15 +23,18 @@ namespace AutoLight.Controllers
         private string[] groupToMatch = { "2", "3", "5", "6", "7"};
         // private string[] codesToMatch = { "804" };
         private readonly ILogger<HomeController> _logger;
-        private List<string> Jobs = new List<string>();
-        
+        private bool checkedIn;
+
         //Home Assistant Token
-        private const string token =
-            "";
+        private const string Token =
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiI5YjM4MjJiZDYwN2U0YWI1YTA1YzhkMDM4YTljM2ZkYiIsImlhdCI6MTYzMjc1MDc3NSwiZXhwIjoxOTQ4MTEwNzc1fQ.FPymxU4ZGMFf5W6nj4Vdb6uIEpsarYuzSK4DhGStx-g";
 
         //OpenWeathMap API key & City
-        private const string weatherApiKey = "";
-        private const string city = "";
+        private const string WeatherApiKey = "057fac76a42f7bb666e2ef566193a7a7";
+        private const string City = "Tilburg";
+
+        // hardware leds variables
+        private int _greenPin = 18;
 
         public HomeController(ILogger<HomeController> logger)
         {
@@ -40,7 +44,10 @@ namespace AutoLight.Controllers
         [HttpGet]
         public async Task<string> Get()
         {
-            await SwitchLightJob("on");
+            System.IO.File.WriteAllText("checkedin.txt", "true");
+            
+            checkedIn = true;
+            await SwitchLightJob("on", false);
             CreateJob();
             return $"Working on it";
         }
@@ -58,15 +65,15 @@ namespace AutoLight.Controllers
             if (DateTime.Now < sunrise)
             {
                 _logger.LogInformation("Scheduling light to turn off at sunrise");
-                await SwitchLightJob("on");
-                var job = BackgroundJob.Schedule(() => SwitchLightJob("off"), sunrise);
+                await SwitchLightJob("on", true);
+                var job = BackgroundJob.Schedule(() => SwitchLightJob("off", false), sunrise);
                 WriteToFile(job);
             }
             else if (DateTime.Now > sunrise && DateTime.Now < sunset)
             {
                 _logger.LogInformation("Scheduling light to turn on at sunset");
-                await SwitchLightJob("off");
-                var job = BackgroundJob.Schedule(() => SwitchLightJob("on"), sunset.AddHours(-1));
+                await SwitchLightJob("off", false);
+                var job = BackgroundJob.Schedule(() => SwitchLightJob("on", true), sunset.AddHours(-1));
                 _logger.LogInformation("Job ID: {0}", job);
                 WriteToFile(job);
                 
@@ -75,10 +82,10 @@ namespace AutoLight.Controllers
             else if (DateTime.Now > sunset)
             {
                 _logger.LogInformation("Scheduling light to turn off at sunrise");
-                await SwitchLightJob("on");
+                await SwitchLightJob("on", true);
                 var secondTimeResult = await client.GetAsync($"{sunsetRoute}&date={DateTime.Now.Year}-{DateTime.Now.Month}-{DateTime.Now.Day}");
                 var nextDay = JsonConvert.DeserializeObject<SunriseSunset>(await secondTimeResult.Content.ReadAsStringAsync());
-                var job = BackgroundJob.Schedule(() => SwitchLightJob("off"), DateTime.Parse(nextDay.Results.Sunrise).ToLocalTime());
+                var job = BackgroundJob.Schedule(() => SwitchLightJob("off", false), DateTime.Parse(nextDay.Results.Sunrise).ToLocalTime());
                 WriteToFile(job);
             }
         }
@@ -86,7 +93,8 @@ namespace AutoLight.Controllers
         [HttpGet]
         public async Task<string> TurnOff()
         {
-            var result = await SwitchLightJob("off");
+            System.IO.File.WriteAllText("checkedin.txt", "false");
+            var result = await SwitchLightJob("off", false);
             ClearJobs();
 
             return $"{result.StatusCode}: {await result.Content.ReadAsStringAsync()}";
@@ -113,13 +121,30 @@ namespace AutoLight.Controllers
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
-        public async Task<HttpResponseMessage> SwitchLightJob(string state)
+        public async Task<HttpResponseMessage> SwitchLightJob(string state, bool forSunset)
         {
             var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", $"{token}");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", $"{Token}");
             //entity to switch state of
             var entity_id = "{\"entity_id\": \"light.office_light\"}";
             HttpContent content = new StringContent(entity_id, Encoding.UTF8, "application/json");
+            
+            if(forSunset)
+                RecurringJob.RemoveIfExists("WeatherCheck");
+
+            if (System.IO.File.ReadAllText("checkedin.txt").Equals("true"))
+            {
+                using var controller = new GpioController();
+                controller.OpenPin(_greenPin, PinMode.Output);
+                controller.Write(_greenPin, PinValue.High);
+            }
+            else if (System.IO.File.ReadAllText("checkedin.txt").Equals("false"))
+            {
+                Console.WriteLine("whyyyyy");
+                using var controller = new GpioController();
+                controller.OpenPin(_greenPin, PinMode.Output);
+                controller.Write(_greenPin, PinValue.Low);
+            }
             //Home Assistant api url:
             return await client.PostAsync(new Uri($"http://localhost:8123/api/services/light/turn_{state}"), content);
         }
@@ -138,20 +163,20 @@ namespace AutoLight.Controllers
             bool turnOff = true;
             var client = new HttpClient();
             var result =
-                await client.GetAsync($"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={weatherApiKey}");
+                await client.GetAsync($"https://api.openweathermap.org/data/2.5/weather?q={City}&appid={WeatherApiKey}");
             var weatherResult = JsonConvert.DeserializeObject<WeatherResult>(await result.Content.ReadAsStringAsync());
             foreach (var group in groupToMatch)
             {
                 if (weatherResult.Weathers[0].Id.ToString().StartsWith(group))
                 {
-                    await SwitchLightJob("on");
+                    await SwitchLightJob("on", false);
                     turnOff = false;
                     break;
                 }
             }
 
             if (turnOff)
-                await SwitchLightJob("off");
+                await SwitchLightJob("off", false);
         }
     }
 }
