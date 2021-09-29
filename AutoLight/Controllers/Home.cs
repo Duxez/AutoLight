@@ -27,10 +27,10 @@ namespace AutoLight.Controllers
 
         //Home Assistant Token
         private const string Token =
-            "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiI5YjM4MjJiZDYwN2U0YWI1YTA1YzhkMDM4YTljM2ZkYiIsImlhdCI6MTYzMjc1MDc3NSwiZXhwIjoxOTQ4MTEwNzc1fQ.FPymxU4ZGMFf5W6nj4Vdb6uIEpsarYuzSK4DhGStx-g";
+            "";
 
         //OpenWeathMap API key & City
-        private const string WeatherApiKey = "057fac76a42f7bb666e2ef566193a7a7";
+        private const string WeatherApiKey = "";
         private const string City = "Tilburg";
 
         // hardware leds variables
@@ -140,7 +140,6 @@ namespace AutoLight.Controllers
             }
             else if (System.IO.File.ReadAllText("checkedin.txt").Equals("false"))
             {
-                Console.WriteLine("whyyyyy");
                 using var controller = new GpioController();
                 controller.OpenPin(_greenPin, PinMode.Output);
                 controller.Write(_greenPin, PinValue.Low);
